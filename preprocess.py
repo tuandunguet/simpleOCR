@@ -6,8 +6,10 @@ import matplotlib.pyplot as plt
 from scipy import stats
 import math
 from scipy import ndimage
+
 debug=False
 report=False
+
 def opencv_resize(image, ratio):
     width = int(image.shape[1] * ratio)
     height = int(image.shape[0] * ratio)
@@ -38,9 +40,10 @@ def get_receipt_contour(contours):
         if len(approx) == 4:
             return approx
 
-###########
+#######################################################
 def getDistance(a,b):
   return np.linalg.norm(a - b)
+
 def getOrderPoints(points):
     '''
     Divide points into 2 part: left and right
@@ -49,10 +52,10 @@ def getOrderPoints(points):
     sortArgX = np.argsort(points[:,0]) 
     left = np.array([points[x] for x in sortArgX[0:2]])
     right = np.array([points[x] for x in sortArgX[2:4]])
-    #point with bigger y is bottomLeft and vice versa
+    # point with bigger y is bottomLeft and vice versa
     bottomLeft = left[np.argmax(left[:,1])]
     topLeft = left[np.argmin(left[:,1])]
-    #point that is farther from the topLeft is bottomRight
+    # point that is farther from the topLeft is bottomRight
     if getDistance(topLeft, right[0]) > getDistance(topLeft, right[1]):
         bottomRight = right[0]
         topRight = right[1]
@@ -60,6 +63,7 @@ def getOrderPoints(points):
         bottomRight = right[1]
         topRight = right[0]
     return (topLeft, topRight, bottomRight, bottomLeft)
+
 def getIntersection(line1, line2):
     #lines are of the form (rho, theta)
     if debug:
@@ -76,6 +80,7 @@ def getIntersection(line1, line2):
     #return form: np.array([x, y]), may raise exception
     result = np.linalg.solve(A, B) 
     return result
+
 def getBoundaryIntersections(line, img):
     rho = line[0]
     theta = line[1]
@@ -107,12 +112,14 @@ def getBoundaryIntersections(line, img):
         return list(intersections)
     else:
         raise Exception("Error in GetBoundaryIntersections: Not enough points")
-#Geting `rho` of a line that goes through `point` with angle `theta`
+
+# Geting `rho` of a line that goes through `point` with angle `theta`
 def getRho(theta):
     def result(point):
         #point is of the form (x, y)
         return point[0] * math.cos(theta) + point[1] * math.sin(theta)
     return result
+
 def checkSimilarRho(line, correctLine, img, rhoErr = 20):
     rho, theta = line
     intersections = getBoundaryIntersections(correctLine, img)
@@ -120,94 +127,12 @@ def checkSimilarRho(line, correctLine, img, rhoErr = 20):
     if rho < max(rhos) + rhoErr and rho > min(rhos) - rhoErr:
         return True
     return False
+
 def getParallel(line, point):
     rho, theta = line
     return getRho(theta)(point), theta
 
-##############
-
-def getOrderPoints(points):
-    '''
-    Divide points into 2 part: left and right
-    sort the points based on x-coordinates
-    '''
-    sortArgX = np.argsort(points[:,0]) 
-    left = np.array([points[x] for x in sortArgX[0:2]])
-    right = np.array([points[x] for x in sortArgX[2:4]])
-    #point with bigger y is bottomLeft and vice versa
-    bottomLeft = left[np.argmax(left[:,1])]
-    topLeft = left[np.argmin(left[:,1])]
-    #point that is farther from the topLeft is bottomRight
-    if getDistance(topLeft, right[0]) > getDistance(topLeft, right[1]):
-        bottomRight = right[0]
-        topRight = right[1]
-    else:
-        bottomRight = right[1]
-        topRight = right[0]
-    return (topLeft, topRight, bottomRight, bottomLeft)
-def getIntersection(line1, line2):
-    #lines are of the form (rho, theta)
-    if debug:
-        print(line1)
-        print(line2)
-    rho1, theta1 = line1
-    rho2, theta2 = line2
-    A = np.array([[math.cos(theta1), math.sin(theta1)],
-                [math.cos(theta2), math.sin(theta2)]])
-    B = np.array([rho1, rho2]) 
-    if debug:
-        print(A)
-        print(B)
-    #return form: np.array([x, y]), may raise exception
-    result = np.linalg.solve(A, B) 
-    return result
-def getBoundaryIntersections(line, img):
-    rho = line[0]
-    theta = line[1]
-    if theta >= math.pi / 2:
-        newTheta = theta - math.pi / 2
-    else:
-        newTheta = theta + math.pi / 2
-    height = img.shape[0]
-    width = img.shape[1]
-    leftBound = (0, 0)
-    rightBound = (width, 0)
-    topBound = (0, math.pi / 2)
-    bottomBound = (height, math.pi / 2)
-    bounds = (leftBound, rightBound, topBound, bottomBound)
-    intersections = list()
-    for bound in bounds:
-        try:
-            intersection = getIntersection(line, bound)
-        except np.linalg.linalg.LinAlgError:
-            continue
-        else:
-            intersections.append(intersection)
-    rhos = [getRho(newTheta)(point) for point in intersections]
-    intersections = np.array(intersections)
-    numPoints = len(intersections)
-    if numPoints == 4:
-        return list(intersections[np.argsort(rhos)][1:3])
-    elif numPoints == 2:
-        return list(intersections)
-    else:
-        raise Exception("Error in GetBoundaryIntersections: Not enough points")
-#Geting `rho` of a line that goes through `point` with angle `theta`
-def getRho(theta):
-    def result(point):
-        #point is of the form (x, y)
-        return point[0] * math.cos(theta) + point[1] * math.sin(theta)
-    return result
-def checkSimilarRho(line, correctLine, img, rhoErr = 20):
-    rho, theta = line
-    intersections = getBoundaryIntersections(correctLine, img)
-    rhos = [getRho(theta)(intersection) for intersection in intersections]
-    if rho < max(rhos) + rhoErr and rho > min(rhos) - rhoErr:
-        return True
-    return False
-def getParallel(line, point):
-    rho, theta = line
-    return getRho(theta)(point), theta
+#####################################################################
 
 #------------Some constants----------------
 #Minimum angle different needed between 2 lines for them to be detect as separated
@@ -218,6 +143,7 @@ rhoErr = 20
 #------------Helper functions--------------
 def getLength(contour):
     return cv2.arcLength(contour, False)
+
 def checkSimilarAngle(theta1, theta2):
     if theta1 <= thetaErr / 2 and theta2 >= math.pi - thetaErr / 2:
         return True#, (theta1, theta2)
@@ -227,8 +153,9 @@ def checkSimilarAngle(theta1, theta2):
         return True#, (theta1, theta2)
     else:
         return False#, None
-#get missing edges in case only three edges are detected
-#return [lonely edges, pair edges]
+
+# get missing edges in case only three edges are detected
+# return [lonely edges, pair edges]
 def getMissingEdges(correctLines):
     if checkSimilarAngle(correctLines[0][1], correctLines[1][1]):
         return [correctLines[2], correctLines[0], correctLines[1]]
@@ -236,7 +163,8 @@ def getMissingEdges(correctLines):
         return [correctLines[1], correctLines[0], correctLines[2]]
     else:
         return correctLines
-#Draw lines into img, `diagonal` is the diagonal of img
+
+# Draw lines into img, `diagonal` is the diagonal of img
 def drawLines(lines, img, diagonal, thick = 3):
     for line in lines:
         rho, theta = line
@@ -251,7 +179,8 @@ def drawLines(lines, img, diagonal, thick = 3):
         cv2.line(img, (x1,y1), (x2, y2), (255,255,255), thick)
     if debug == True:
         print(lines)
-#resize image for faster processing
+
+# resize image for faster processing
 def resizeImg(img):
     width = img.shape[1]
     height = img.shape[0]
@@ -266,11 +195,12 @@ def resizeImg(img):
             print("Warning: Image is too small")
         return img, 1, width, height
 
-######################
+#################################################################
 
 if __name__ == "__main__":
   parser = argparse.ArgumentParser()
   parser.add_argument("--input_file", "-i", type=str, help="Path to input image")
+  parser.add_argument("--output_file", "-o", type=str, help="Path to output image")
   args = parser.parse_args()
 
   image = cv2.imread(args.input_file);
@@ -378,6 +308,8 @@ if __name__ == "__main__":
   transMat = cv2.getPerspectiveTransform(oldCorners, newCorners)
   #Transform
   resultImage = cv2.warpPerspective(originalImg, transMat, (int(newWidth), int(newHeight)))
+
   plot_rgb(resultImage)
-  
+    
+  cv2.imwrite(args.output_file, resultImage)
   plt.show()
