@@ -2,27 +2,12 @@ import argparse
 import numpy as np
 import cv2
 import matplotlib.pyplot as plt
-
-from scipy import stats
 import math
-from scipy import ndimage
+
+from utils import plot_rgb, plot_gray, show_plot
 
 debug=False
 report=False
-
-def opencv_resize(image, ratio):
-    width = int(image.shape[1] * ratio)
-    height = int(image.shape[0] * ratio)
-    dim = (width, height)
-    return cv2.resize(image, dim, interpolation = cv2.INTER_AREA)
-
-def plot_rgb(image):
-    plt.figure(figsize=(16,10))
-    return plt.imshow(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
-
-def plot_gray(image):
-    plt.figure(figsize=(16,10))
-    return plt.imshow(image, cmap='Greys_r')
 
 # approximate the contour by a more primitive polygon shape
 def approximate_contour(contour):
@@ -197,119 +182,142 @@ def resizeImg(img):
 
 #################################################################
 
-if __name__ == "__main__":
-  parser = argparse.ArgumentParser()
-  parser.add_argument("--input_file", "-i", type=str, help="Path to input image")
-  parser.add_argument("--output_file", "-o", type=str, help="Path to output image")
-  args = parser.parse_args()
+def receipt_crop(image, showProgress = False):
+    try:
+        originalImg = image.copy()
 
-  image = cv2.imread(args.input_file);
-  originalImg = image.copy()
-  # resize_ratio = 500 / image.shape[0]
-  # original = image.copy()
-  # image = opencv_resize(image, resize_ratio)
+        image, ratio, newWidth, newHeight = resizeImg(image)
 
-  image, ratio, newWidth, newHeight = resizeImg(image)
+        height, width = image.shape[0], image.shape[1]
 
-  height, width = image.shape[0], image.shape[1]
-  
-  # Convert to grayscale for further processing
-  gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        # Convert to grayscale for further processing
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
 
-  # Get rid of noise with Gaussian Blur filter
-  blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+        # Get rid of noise with Gaussian Blur filter
+        blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
-  # Detect white regions
-  # rectKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
-  # dilated = cv2.dilate(blurred, rectKernel)
+        # Detect white regions
+            # rectKernel = cv2.getStructuringElement(cv2.MORPH_RECT, (9, 9))
+            # dilated = cv2.dilate(blurred, rectKernel)
 
-  # find edge
-  edged = cv2.Canny(blurred, 100, 200, apertureSize=3)
-  plot_gray(edged)
+        # find edge
+        edged = cv2.Canny(blurred, 100, 200, apertureSize=3)
 
-  # Detect all contours in Canny-edged image
-  contours, hierarchy = cv2.findContours(edged, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-  image_with_contours = cv2.drawContours(image.copy(), contours, -1, (0,255,0), 3)
-  plot_rgb(image_with_contours)
+        if (showProgress):
+            plot_gray(edged)
 
-  # Get longest contour
-  longestContour = max(contours, key = getContourLength)
-  image_with_longest_contour = cv2.drawContours(image.copy(), [longestContour], -1, (0,255,0), 3)
-  plot_rgb(image_with_longest_contour)
+        # Detect all contours in Canny-edged image
+        contours, hierarchy = cv2.findContours(edged, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        image_with_contours = cv2.drawContours(image.copy(), contours, -1, (0,255,0), 3)
 
-  black = np.zeros((height, width), "uint8")
-  cv2.drawContours(black, [longestContour], -1, (255,255,255), 1)
-  plot_rgb(black)
-  lines = cv2.HoughLines(black,1,np.pi/180, 50)
+        if (showProgress):
+            plot_rgb(image_with_contours)
 
-  correctLines = list()
-  for line in lines:
-    if len(correctLines) == 4:
-        break
-    rho,theta = line[0]
-    isNew = True
-    numSimilar = 0
-    for l in correctLines:
-        correctTheta = l[1]
-        if checkSimilarAngle(theta, correctTheta):
-            numSimilar += 1
-            if numSimilar == 2:
-                isNew = False
+        # Get longest contour
+        longestContour = max(contours, key = getContourLength)
+        image_with_longest_contour = cv2.drawContours(image.copy(), [longestContour], -1, (0,255,0), 3)
+
+        if (showProgress):
+            plot_rgb(image_with_longest_contour)
+
+        black = np.zeros((height, width), "uint8")
+        cv2.drawContours(black, [longestContour], -1, (255,255,255), 1)
+
+        if (showProgress):
+            plot_rgb(black)
+
+        lines = cv2.HoughLines(black,1,np.pi/180, 50)
+
+        correctLines = list()
+        for line in lines:
+            if len(correctLines) == 4:
                 break
-            if checkSimilarRho(line[0], l, image, rhoErr):
-                isNew = False
-                break
-    if isNew:
-        correctLines.append([rho, theta])
-    else:
-        continue
-  
-  for line in correctLines:
-    line[0] = line[0] / ratio
-    numLines = len(correctLines)
-    if numLines < 3:
-        raise Exception("Error: Receipt does not have enough edges to detect!")
-    elif numLines == 3:
-      correctLines = getMissingEdges(correctLines)
-      rho, theta = correctLines[0]
-      intersections = getBoundaryIntersections(correctLines[1], originalImg) + getBoundaryIntersections(correctLines[2], originalImg)
-      intersections.sort(key = getRho(theta))
-      if abs(getRho(theta)(intersections[1]) - rho) > abs(getRho(theta)(intersections[2]) - rho):
-          newLine = getParallel(correctLines[0], intersections[1])
-      else:
-          newLine = getParallel(correctLines[0], intersections[2])
-      correctLines.append(newLine)
-  
-  corners = list()
-  for i in range(4):
-    for j in range(i + 1, 4):
-      if checkSimilarAngle(correctLines[i][1], correctLines[j][1]):
-          continue
-      try:
-          intersection = getIntersection(correctLines[i], correctLines[j])
-      except np.linalg.linalg.LinAlgError:
-          continue
-      else:
-          corners.append(intersection)
-  if len(corners) != 4:
-    raise Exception('Error: Cannot get correct corners')
-  topLeft, topRight, bottomRight, bottomLeft = getOrderPoints(np.array(corners, dtype = "float32"))
-  oldCorners = np.array([topLeft, topRight, bottomRight, bottomLeft], dtype = "float32")
-  #Compute new width and height
-  newWidth = max(getDistance(topLeft, topRight), getDistance(bottomLeft, bottomRight))
-  newHeight = max(getDistance(topLeft, bottomLeft), getDistance(topRight, bottomRight))
-  #Compute 4 new corners
-  newCorners = np.array([
-    [0, 0],
-    [newWidth - 1, 0],
-    [newWidth - 1, newHeight -1],
-    [0, newHeight -1]], dtype = "float32")
-  #Compute transformation matrix
-  transMat = cv2.getPerspectiveTransform(oldCorners, newCorners)
-  #Transform
-  resultImage = cv2.warpPerspective(originalImg, transMat, (int(newWidth), int(newHeight)))
-
-  plot_rgb(resultImage)
+            rho,theta = line[0]
+            isNew = True
+            numSimilar = 0
+            for l in correctLines:
+                correctTheta = l[1]
+                if checkSimilarAngle(theta, correctTheta):
+                    numSimilar += 1
+                    if numSimilar == 2:
+                        isNew = False
+                        break
+                    if checkSimilarRho(line[0], l, image, rhoErr):
+                        isNew = False
+                        break
+            if isNew:
+                correctLines.append([rho, theta])
+            else:
+                continue
     
-  cv2.imwrite(args.output_file, resultImage)
-  plt.show()
+        for line in correctLines:
+            line[0] = line[0] / ratio
+            numLines = len(correctLines)
+            if numLines < 3:
+                raise Exception("Error: Receipt does not have enough edges to detect!")
+            elif numLines == 3:
+                correctLines = getMissingEdges(correctLines)
+                rho, theta = correctLines[0]
+                intersections = getBoundaryIntersections(correctLines[1], originalImg) + getBoundaryIntersections(correctLines[2], originalImg)
+                intersections.sort(key = getRho(theta))
+                if abs(getRho(theta)(intersections[1]) - rho) > abs(getRho(theta)(intersections[2]) - rho):
+                    newLine = getParallel(correctLines[0], intersections[1])
+                else:
+                    newLine = getParallel(correctLines[0], intersections[2])
+                correctLines.append(newLine)
+    
+        corners = list()
+        for i in range(4):
+            for j in range(i + 1, 4):
+                if checkSimilarAngle(correctLines[i][1], correctLines[j][1]):
+                    continue
+                try:
+                    intersection = getIntersection(correctLines[i], correctLines[j])
+                except np.linalg.linalg.LinAlgError:
+                    continue
+                else:
+                    corners.append(intersection)
+        if len(corners) != 4:
+            raise Exception('Error: Cannot get correct corners')
+        topLeft, topRight, bottomRight, bottomLeft = getOrderPoints(np.array(corners, dtype = "float32"))
+        oldCorners = np.array([topLeft, topRight, bottomRight, bottomLeft], dtype = "float32")
+        #Compute new width and height
+        newWidth = max(getDistance(topLeft, topRight), getDistance(bottomLeft, bottomRight))
+        newHeight = max(getDistance(topLeft, bottomLeft), getDistance(topRight, bottomRight))
+        #Compute 4 new corners
+        newCorners = np.array([
+            [0, 0],
+            [newWidth - 1, 0],
+            [newWidth - 1, newHeight -1],
+            [0, newHeight -1]], dtype = "float32")
+        #Compute transformation matrix
+        transMat = cv2.getPerspectiveTransform(oldCorners, newCorners)
+        #Transform
+        resultImage = cv2.warpPerspective(originalImg, transMat, (int(newWidth), int(newHeight)))
+
+        if (showProgress):
+            plot_rgb(resultImage)
+        
+        if (showProgress):
+            show_plot()
+
+    # return original image if error happen
+    except Exception as e:
+        return image
+
+    return resultImage
+
+
+#################################################################
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--input_file", "-i", type=str, help="Path to input image")
+    parser.add_argument("--output_file", "-o", type=str, help="Path to output image")
+    args = parser.parse_args()
+
+    image = cv2.imread(args.input_file)
+
+    receipt_cropped_img = receipt_crop(image)
+
+    cv2.imwrite(receipt_cropped_img, args.output_file)
