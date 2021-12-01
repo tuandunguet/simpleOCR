@@ -15,15 +15,31 @@ def resize(img):
   return img
 
 # Increase Brightness
-def checkDayOrNight(img, thrshld):
-    is_light = np.mean(img) > thrshld
-    return 0 if is_light else 1 # 0 --> light and 1 -->dark
+def checkNight(img, thrshld):
+    is_night = np.mean(img) < thrshld
+    return 1 if is_night else 0
+def checkTooLight(img, thrshld):
+    is_too_light = np.mean(img) > thrshld
+    return 1 if is_too_light else 0
 def increaseBrightness(img):
-  alpha = 1 
-  beta = 40
-  img=cv2.addWeighted(img, alpha,np.zeros(img.shape,img.dtype), 0 ,beta)
-  return img
-
+    alpha = 1 
+    beta = 40
+    img = cv2.addWeighted(img, alpha,np.zeros(img.shape,img.dtype), 0 ,beta)
+    return img
+def decreaseBrightness(img):
+    alpha = 1 
+    beta = -30
+    img = cv2.addWeighted(img, alpha,np.zeros(img.shape,img.dtype), 0 ,beta)
+    return img
+def adjustBrightness(img):
+    # increase brightness if too dark
+    if checkNight(img, 130) == 1:
+        return increaseBrightness(img)
+    # increase brightness if too dark
+    elif checkTooLight(img, 220) == 1:
+        return decreaseBrightness(img)
+    else:
+        return img
 
 # Noise reduction
 def noise_remove(img):
@@ -47,9 +63,8 @@ def preprocess(image, showProgress=False):
     if (showProgress):
         plot_rgb(gray)
 
-    # increase brightness if too dark
-    if checkDayOrNight(gray, 130) == 1:
-        gray = increaseBrightness(gray)
+    # adjust brightness
+    gray = adjustBrightness(gray)
 
     if (showProgress):
         plot_rgb(gray)
@@ -61,29 +76,28 @@ def preprocess(image, showProgress=False):
         # plot_rgb(equalized)
     
     # Get rid of noise with Gaussian Blur filter
-
     blurred = cv2.GaussianBlur(gray, (5, 5), 0)
 
     if (showProgress):
         plot_gray(blurred)
 
+    noise_removed = noise_remove(gray)
+
+    if (showProgress):
+        plot_gray(noise_removed)
+
     # Binarization using adaptive threshold
-    thresh = cv2.adaptiveThreshold(gray, 255,
+    thresh = cv2.adaptiveThreshold(noise_removed, 255,
 	cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 21, 9)
 
     if (showProgress):
         plot_gray(thresh)
 
-    noise_removed = noise_remove(thresh)
-
-    if (showProgress):
-        plot_gray(noise_removed)
-
     # thinning
     # kernel = np.ones((3,3),np.uint8)
     # erosion = cv2.erode(thresh,kernel,iterations = 1)
 
-    result = noise_removed
+    result = thresh
 
     if (showProgress):
         show_plot()

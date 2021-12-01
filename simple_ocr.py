@@ -36,25 +36,49 @@ class HoadonOCR:
         text = text_recognize(img).lower()
 
         if "highlands" in text:
+            print("----> " + HIGHLANDS)
             return HIGHLANDS
-        elif "starbucks" in text:
+        elif "starbucks" in text or "store-" in text:
+            print("----> " + STARBUCKS)
             return STARBUCKS
         elif "phuc long" in text:
+            print("----> " + PHUCLONG)
             return PHUCLONG
         else:
-            return OTHERS
+            SCORE_THRSHLD = 0.4
 
-        # for word in text:
-            # highlands_score = 0
-            # phuclong_score = 0
-            # starbucks_score = 0
+            highlands_score = 0
+            phuclong_score = 0
+            starbucks_score = 0
 
-            # word = word.lower()
+            for word in text.splitlines():
 
-            # highlands_similar = similar(word, 'highlands')
-            # if (highlands_similar > 0.7):
-                # highlands_score += highlands_similar
+                word = word.lower()
 
-            # phuclong_similar = similar(word, 'phuc long')
+                highlands_similar = max([similar(word, 'highlands'),similar(word, 'highlands coffee')])
+                if (highlands_similar > SCORE_THRSHLD):
+                    highlands_score += highlands_similar
+
+                phuclong_similar = similar(word, 'phuc long')
+                if (phuclong_similar > SCORE_THRSHLD):
+                    phuclong_score += phuclong_similar
+
+                starbucks_similar = max([similar(word, 'starbucks'), similar(word, 'store-')])
+                if (starbucks_similar > SCORE_THRSHLD):
+                    starbucks_score += starbucks_similar
+            
+            max_score = max([highlands_score, phuclong_score, starbucks_score])
+            if max_score == 0:
+                print("====> " + OTHERS)
+                return OTHERS
+            elif (max_score == highlands_score):
+                print("====> " + HIGHLANDS)
+                return HIGHLANDS
+            elif (max_score == phuclong_score):
+                print("====> " + PHUCLONG)
+                return PHUCLONG
+            else:
+                print("====> " + STARBUCKS)
+                return STARBUCKS
 
         # return self.labels[random.randint(0, 3)]
